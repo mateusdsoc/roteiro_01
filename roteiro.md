@@ -1,7 +1,3 @@
-Aqui está o roteiro formatado em Markdown com um estilo organizado e profissional:
-
----
-
 # 📝 Roteiro 1: Servidor de Aplicação Tradicional
 **Laboratório de Desenvolvimento de Aplicações Móveis e Distribuídas**
 *Curso de Engenharia de Software - PUC Minas*
