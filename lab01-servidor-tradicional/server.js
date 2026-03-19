@@ -8,6 +8,7 @@ const config = require('./config/database');
 const database = require('./database/database');
 const authRoutes = require('./routes/auth');
 const taskRoutes = require('./routes/tasks');
+const logger = require('./middleware/logger');
 
 /**
  * Servidor de Aplicação Tradicional
@@ -29,11 +30,8 @@ app.use(cors());
 app.use(bodyParser.json({ limit: '10mb' }));
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Logging de requisições
-app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
-    next();
-});
+// Loggs estruturados
+app.use(logger.middlewareHTTP());
 
 // Rotas principais
 app.get('/', (req, res) => {
@@ -61,6 +59,15 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/tasks', taskRoutes);
 
+// logs recentes
+app.get('/api/logs', (req, res) => {
+    const quantidade = parseInt(req.query.quantidade) || 50;
+    res.json({
+        success: true,
+        data: logger.getUltimosLogs(quantidade)
+    });
+});
+
 // 404 handler
 app.use((req, res) => {
     res.status(404).json({
@@ -71,7 +78,10 @@ app.use((req, res) => {
 
 // Error handler global
 app.use((error, req, res, next) => {
-    console.error('Erro:', error);
+    logger.error('Erro interno do servidor', {
+        erro: error.message,
+        stack: error.stack
+    });
     res.status(500).json({
         success: false,
         message: 'Erro interno do servidor'
@@ -84,14 +94,14 @@ async function startServer() {
         await database.init();
         
         app.listen(config.port, () => {
-            console.log('🚀 =================================');
-            console.log(`🚀 Servidor iniciado na porta ${config.port}`);
-            console.log(`🚀 URL: http://localhost:${config.port}`);
-            console.log(`🚀 Health: http://localhost:${config.port}/health`);
-            console.log('🚀 =================================');
+            logger.info('Servidor iniciado', {
+                porta: config.port,
+                url: `http://localhost:${config.port}`,
+                health: `http://localhost:${config.port}/health`
+            });
         });
     } catch (error) {
-        console.error('❌ Falha na inicialização:', error);
+        logger.fatal('Falha na inicialização', { erro: error.message });
         process.exit(1);
     }
 }

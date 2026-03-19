@@ -5,11 +5,13 @@ const database = require('../database/database');
 const { authMiddleware } = require('../middleware/auth');
 const { validate } = require('../middleware/validation');
 const cache = require('../middleware/cache');
+const userRateLimit = require('../middleware/userRateLimit');
 
 const router = express.Router();
 
-// Todas as rotas requerem autenticação
+// Todas as rotas requerem autenticação + rate limit por usuário
 router.use(authMiddleware);
+router.use(userRateLimit.middleware());
 
 // Listar tarefas (com paginação)
 router.get('/', async (req, res) => {
