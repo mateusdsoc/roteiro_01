@@ -10,31 +10,55 @@ const router = express.Router();
 // Todas as rotas requerem autenticação
 router.use(authMiddleware);
 
-// Listar tarefas
+// Listar tarefas (com paginação)
 router.get('/', async (req, res) => {
     try {
         const { completed, priority } = req.query;
-        let sql = 'SELECT * FROM tasks WHERE userId = ?';
-        const params = [req.user.id];
+
+        // Parâmetros de paginação com valores padrão
+        const page = Math.max(1, parseInt(req.query.page) || 1);
+        const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 10));
+        const offset = (page - 1) * limit;
+
+        // Construir WHERE clause (reutilizada para contagem e busca)
+        let whereClause = 'WHERE userId = ?';
+        const filterParams = [req.user.id];
 
         if (completed !== undefined) {
-            sql += ' AND completed = ?';
-            params.push(completed === 'true' ? 1 : 0);
+            whereClause += ' AND completed = ?';
+            filterParams.push(completed === 'true' ? 1 : 0);
         }
         
         if (priority) {
-            sql += ' AND priority = ?';
-            params.push(priority);
+            whereClause += ' AND priority = ?';
+            filterParams.push(priority);
         }
 
-        sql += ' ORDER BY createdAt DESC';
+        const countResult = await database.get(
+            `SELECT COUNT(*) as totalItems FROM tasks ${whereClause}`,
+            filterParams
+        );
+        const totalItems = countResult.totalItems;
+        const totalPages = Math.ceil(totalItems / limit);
 
-        const rows = await database.all(sql, params);
+        // 2. Buscar tarefas da página atual
+        const rows = await database.all(
+            `SELECT * FROM tasks ${whereClause} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+            [...filterParams, limit, offset]
+        );
         const tasks = rows.map(row => new Task({...row, completed: row.completed === 1}));
 
         res.json({
             success: true,
-            data: tasks.map(task => task.toJSON())
+            data: tasks.map(task => task.toJSON()),
+            pagination: {
+                currentPage: page,
+                totalPages,
+                totalItems,
+                itemsPerPage: limit,
+                hasNextPage: page < totalPages,
+                hasPrevPage: page > 1
+            }
         });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Erro interno do servidor' });
