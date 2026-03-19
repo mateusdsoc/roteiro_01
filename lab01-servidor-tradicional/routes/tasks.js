@@ -4,6 +4,7 @@ const Task = require('../models/Task');
 const database = require('../database/database');
 const { authMiddleware } = require('../middleware/auth');
 const { validate } = require('../middleware/validation');
+const cache = require('../middleware/cache');
 
 const router = express.Router();
 
@@ -19,6 +20,15 @@ router.get('/', async (req, res) => {
         const page = Math.max(1, parseInt(req.query.page) || 1);
         const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 10));
         const offset = (page - 1) * limit;
+
+        // Gerar chave única do cache baseada no usuário + filtros + página
+        const cacheKey = `tasks:${req.user.id}:p${page}:l${limit}:c${completed}:pr${priority}`;
+
+        // Verificar consulta no cache
+        const cached = cache.get(cacheKey);
+        if (cached) {
+            return res.json(cached);
+        }
 
         // Construir WHERE clause (reutilizada para contagem e busca)
         let whereClause = 'WHERE userId = ?';
@@ -41,14 +51,13 @@ router.get('/', async (req, res) => {
         const totalItems = countResult.totalItems;
         const totalPages = Math.ceil(totalItems / limit);
 
-        // 2. Buscar tarefas da página atual
         const rows = await database.all(
             `SELECT * FROM tasks ${whereClause} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
             [...filterParams, limit, offset]
         );
         const tasks = rows.map(row => new Task({...row, completed: row.completed === 1}));
 
-        res.json({
+        const resposta = {
             success: true,
             data: tasks.map(task => task.toJSON()),
             pagination: {
@@ -59,7 +68,11 @@ router.get('/', async (req, res) => {
                 hasNextPage: page < totalPages,
                 hasPrevPage: page > 1
             }
-        });
+        };
+
+        cache.set(cacheKey, resposta);
+
+        res.json(resposta);
     } catch (error) {
         res.status(500).json({ success: false, message: 'Erro interno do servidor' });
     }
@@ -89,6 +102,8 @@ router.post('/', validate('task'), async (req, res) => {
             'INSERT INTO tasks (id, title, description, priority, userId) VALUES (?, ?, ?, ?, ?)',
             [task.id, task.title, task.description, task.priority, task.userId]
         );
+
+        cache.invalidar(`tasks:${req.user.id}`);
 
         res.status(201).json({
             success: true,
@@ -148,6 +163,8 @@ router.put('/:id', async (req, res) => {
         );
 
         const task = new Task({...updatedRow, completed: updatedRow.completed === 1});
+
+        cache.invalidar(`tasks:${req.user.id}`);
         
         res.json({
             success: true,
@@ -173,6 +190,8 @@ router.delete('/:id', async (req, res) => {
                 message: 'Tarefa não encontrada'
             });
         }
+
+        cache.invalidar(`tasks:${req.user.id}`);
 
         res.json({
             success: true,
