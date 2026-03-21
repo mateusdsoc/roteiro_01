@@ -46,3 +46,4 @@ O cache que implementamos fica na RAM do processo. Se reiniciar o servidor, o ca
 | Custo | Fixo | Fixo | Alto | Sob demanda |
 
 Essa arquitetura cliente-servidor tradicional serve como uma boa base para entender os conceitos, mas em um cenário real com muitos usuários, seria necessário evoluir para uma das alternativas acima.
+
